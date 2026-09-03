@@ -1,4 +1,4 @@
-Gentoo Automated Installer ("setup-gentoo.sh")
+** Gentoo Automated Installer ** ("setup-gentoo.sh")
 
 «Vibe-coded project. This installer was built with a focus on simplicity, automation, and getting a working Gentoo installation up and running with minimal manual intervention.»
 
