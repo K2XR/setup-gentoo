@@ -208,10 +208,11 @@ cat > /etc/hosts <<HOSTS
 HOSTS
 
 # --- senha do root ---
-echo "root:$ROOT_PASS" | chpasswd
+ROOT_HASH=$(openssl passwd -6 "$ROOT_PASS")
+sed -i "s|^root:[^:]*|root:$ROOT_HASH|" /etc/shadow
 
 # --- make.conf ---
-cat > /etc/portage/make.conf <<'MAKE'
+cat > /etc/portage/make.conf <<MAKE
 COMMON_FLAGS="-O2 -pipe"
 MAKEOPTS="-j$(nproc)"
 EMERGE_DEFAULT_OPTS="--ask=n --quiet"
@@ -219,7 +220,14 @@ ACCEPT_LICENSE="*"
 MAKE
 
 mkdir -p /etc/portage/package.accept_keywords
-echo 'sys-kernel/gentoo-kernel-bin' > /etc/portage/package.accept_keywords/gentoo-kernel-bin
+cat > /etc/portage/package.accept_keywords/gentoo-kernel-bin <<'EOF'
+sys-kernel/gentoo-kernel-bin ~amd64
+virtual/dist-kernel ~amd64
+sys-kernel/installkernel ~amd64
+EOF
+
+mkdir -p /etc/portage/package.use
+echo "net-wireless/wpa_supplicant dbus" > /etc/portage/package.use/wpa_supplicant
 
 # --- pacotes: kernel pré-compilado, grub, dhcpcd, networkmanager (nmtui) ---
 echo "[*] Instalando pacotes (grub, gentoo-kernel-bin, dhcpcd, networkmanager)..."
