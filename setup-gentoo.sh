@@ -7,7 +7,7 @@
 # Configurações fixas:
 #   * hostname: gentoo
 #   * apenas usuário root (senha padrão: "gentoo", mude via ROOT_PASS)
-#   * init: OpenRC, rede via dhcpcd (DHCP)
+#   * init: OpenRC, rede via dhcpcd + iwd (Wi-Fi)
 #   * kernel pré-compilado: sys-kernel/gentoo-kernel-bin (initramfs via dracut)
 #   * bootloader: GRUB (UEFI ou BIOS detectados automaticamente)
 #   * locale: pt_BR.UTF-8 (en_US.UTF-8 também gerado)
@@ -226,12 +226,15 @@ virtual/dist-kernel ~amd64
 sys-kernel/installkernel ~amd64
 EOF
 
-mkdir -p /etc/portage/package.use
-echo "net-wireless/wpa_supplicant dbus" > /etc/portage/package.use/wpa_supplicant
+mkdir -p /etc/iwd
+cat > /etc/iwd/main.conf <<EOF
+[General]
+EnableNetworkConfiguration=true
+EOF
 
-# --- pacotes: kernel pré-compilado, grub, dhcpcd, networkmanager (nmtui) ---
-echo "[*] Instalando pacotes (grub, gentoo-kernel-bin, dhcpcd, networkmanager)..."
-USE="dracut" emerge sys-boot/grub sys-kernel/gentoo-kernel-bin net-misc/dhcpcd net-misc/networkmanager
+# --- pacotes: kernel pré-compilado, grub, dhcpcd, iwd ---
+echo "[*] Instalando pacotes (grub, gentoo-kernel-bin, dhcpcd, iwd)..."
+USE="dracut" emerge sys-boot/grub sys-kernel/gentoo-kernel-bin net-misc/dhcpcd net-wireless/iwd
 if [ "$EFI" = "yes" ]; then
     emerge sys-boot/efibootmgr
 fi
@@ -253,7 +256,7 @@ grub-mkconfig -o /boot/grub/grub.cfg
 
 # --- serviços ---
 rc-update add dhcpcd default
-rc-update add NetworkManager default
+rc-update add iwd default
 
 # --- limpeza ---
 rm -f /root/install-in-chroot.sh
