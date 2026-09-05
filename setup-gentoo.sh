@@ -232,9 +232,9 @@ cat > /etc/iwd/main.conf <<EOF
 EnableNetworkConfiguration=true
 EOF
 
-# --- pacotes: kernel pré-compilado, grub, dhcpcd, iwd ---
-echo "[*] Instalando pacotes (grub, gentoo-kernel-bin, dhcpcd, iwd)..."
-USE="dracut" emerge sys-boot/grub sys-kernel/gentoo-kernel-bin net-misc/dhcpcd net-wireless/iwd
+# --- pacotes: kernel pré-compilado, grub, dhcpcd, iwd, linux-firmware ---
+echo "[*] Instalando pacotes (grub, gentoo-kernel-bin, dhcpcd, iwd, linux-firmware)..."
+USE="dracut" emerge sys-boot/grub sys-kernel/gentoo-kernel-bin net-misc/dhcpcd net-wireless/iwd sys-kernel/linux-firmware
 if [ "$EFI" = "yes" ]; then
     emerge sys-boot/efibootmgr
 fi
