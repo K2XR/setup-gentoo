@@ -23,6 +23,72 @@
 
 set -euo pipefail
 
+# ---------- help / list options ----------
+usage() {
+cat <<'USAGE'
+Usage: sudo ./setup-gentoo.sh [OPTIONS]
+
+Assisted Gentoo installer (setup-alpine style). Without options it asks
+everything interactively; Enter accepts the [default].
+
+Options:
+  -h, --help            Show this help and exit
+  -l, --list-options    List all env vars / defaults and exit
+  -y, --yes             Non-interactive (same as YES=1), accept all defaults
+  --dry-run             Show resolved config and exit without touching disks
+  VAR=value ...         Set any option as argument (e.g. HOSTNAME=pc DISK=/dev/vda)
+
+All options (env var, default):
+  HOSTNAME    (gentoo)                 Machine hostname
+  KEYMAP      (us)                     Console keymap (us, us-intl, br-abnt2, de, ...)
+  TZONE       (America/New_York)       Timezone under /usr/share/zoneinfo
+  LOCALE      (en_US.UTF-8)            Primary locale (en_US.UTF-8 always generated too)
+  USERNAME    (empty)                  Extra user; empty = root only
+  ROOT_PASS   (gentoo)                 Root password (prompted hidden if unset)
+  USER_PASS   (gentoo)                 Password for USERNAME (prompted if USERNAME set)
+  DISK        (none, required)         Target disk, e.g. /dev/sda, /dev/nvme0n1
+  FULL_FIRMWARE (unset)                Keep all firmware blobs (needs a bigger disk)
+  MIRROR      (https://distfiles.gentoo.org)
+  STAGE3_URL  (latest openrc)          Override stage3 tarball URL
+  YES=1       (unset)                  Non-interactive mode
+
+Examples:
+  sudo ./setup-gentoo.sh
+  sudo ./setup-gentoo.sh --list-options
+  sudo ./setup-gentoo.sh HOSTNAME=pc USERNAME=john DISK=/dev/vda
+  sudo YES=1 DISK=/dev/vda ./setup-gentoo.sh
+USAGE
+}
+
+list_options() {
+    printf '%-12s default: %s\n' \
+        "HOSTNAME" "${HOSTNAME:-gentoo}" \
+        "KEYMAP" "${KEYMAP:-us}" \
+        "TZONE" "${TZONE:-America/New_York}" \
+        "LOCALE" "${LOCALE:-en_US.UTF-8}" \
+        "USERNAME" "${USERNAME:-(empty = root only)}" \
+        "ROOT_PASS" "${ROOT_PASS:-(prompted)}" \
+        "USER_PASS" "${USER_PASS:-(prompted if USERNAME set)}" \
+        "DISK" "${DISK:-(none, required)}" \
+        "FULL_FIRMWARE" "${FULL_FIRMWARE:-(unset = trim datacenter/SoC blobs)}" \
+        "MIRROR" "${MIRROR:-https://distfiles.gentoo.org}" \
+        "STAGE3_URL" "${STAGE3_URL:-(latest stage3-amd64-openrc)}" \
+        "YES" "${YES:-(unset)}"
+}
+
+DRY_RUN=""
+for arg in "$@"; do
+    case "$arg" in
+        -h|--help) usage; exit 0 ;;
+        -l|--list-options) list_options; exit 0 ;;
+        -y|--yes) NONINTERACTIVE=1; YES=1 ;;
+        --dry-run) DRY_RUN=1; NONINTERACTIVE=1; YES=1 ;;
+        *=*) export "${arg%%=*}=${arg#*=}"
+             [ "${arg%%=*}" = "HOSTNAME" ] && _HOSTNAME_FROM_CLI=1 ;;
+        *) echo "Unknown argument: $arg (try --help)" >&2; exit 1 ;;
+    esac
+done
+
 MIRROR="${MIRROR:-https://distfiles.gentoo.org}"
 CHROOT_DIR="/mnt/gentoo"
 NONINTERACTIVE="${YES:-${NONINTERACTIVE:-}}"
@@ -38,7 +104,7 @@ q()      { printf '\e[1;36m>>>\e[0m %s' "$1"; }
 ask() {
     local var="$1" prompt="$2" def="$3" cur
     eval "cur=\"\${$var:-}\""
-    if [ -n "${NONINTERACTIVE}" ] && [ -n "$cur" -o -n "$def" ]; then
+    if [ -n "${NONINTERACTIVE}" ]; then
         eval "$var=\"\${$var:-$def}\""
         return
     fi
@@ -71,7 +137,7 @@ ask_pass() {
 
 trap 'umount -R "$CHROOT_DIR" 2>/dev/null || umount -l "$CHROOT_DIR" 2>/dev/null || true' EXIT
 
-[ "$(id -u)" -eq 0 ] || cfatal "Run as root: sudo $0"
+if [ -z "$DRY_RUN" ] && [ "$(id -u)" -ne 0 ]; then cfatal "Run as root: sudo $0"; fi
 
 for cmd in parted partprobe mkfs.ext4 tar curl lsblk blkid sha512sum chroot; do
     command -v "$cmd" >/dev/null 2>&1 || cfatal "Missing command in live environment: $cmd"
@@ -82,6 +148,11 @@ echo "Press Enter to accept the value in [brackets]."
 echo
 
 # ---------- 0) questionnaire ----------
+# HOSTNAME is auto-exported by most shells (live env hostname), so ignore it
+# unless explicitly passed as CLI arg (VAR=value) or YES env.
+if [ -z "${_HOSTNAME_FROM_CLI:-}" ] && [ "${HOSTNAME:-}" = "$(cat /proc/sys/kernel/hostname 2>/dev/null)" ]; then
+    unset HOSTNAME
+fi
 ask HOSTNAME "Machine hostname" "${HOSTNAME:-gentoo}"
 ask KEYMAP  "Keyboard layout (e.g.: us, us-intl, br-abnt2, de, es, fr)" "${KEYMAP:-us}"
 ask TZONE   "Timezone (e.g.: America/New_York)" "${TZONE:-America/New_York}"
@@ -96,6 +167,13 @@ fi
 
 echo
 cecho "Summary: hostname=$HOSTNAME keymap=$KEYMAP timezone=$TZONE locale=$LOCALE user=${USERNAME:-(root only)}"
+
+if [ -n "$DRY_RUN" ]; then
+    echo "--- resolved config (dry-run, nothing will be touched) ---"
+    list_options
+    cecho "disk: ${DISK:-(not set)}"
+    exit 0
+fi
 
 # ---------- 1) disk selection ----------
 cecho "Available disks:"
@@ -118,6 +196,17 @@ export DISK
 
 if mount | grep -q "^$DISK"; then
     cfatal "$DISK is mounted/in use by the live system. Pick another disk."
+fi
+
+# --- disk size sanity check (recommendation only, never aborts) ---
+DISK_BYTES=$(lsblk -dbn -o SIZE "$DISK" 2>/dev/null || echo 0)
+if [ "$DISK_BYTES" -lt $((8*1024*1024*1024)) ]; then
+    cwarn "$DISK is smaller than 8 GiB. The install peaks around ~7 GB"
+    cwarn "(stage3 + portage tree + linux-firmware + kernel unpack) and"
+    cwarn "will likely run out of space. A disk of 12+ GiB is recommended."
+elif [ "$DISK_BYTES" -lt $((12*1024*1024*1024)) ]; then
+    cwarn "$DISK is smaller than 12 GiB. It usually fits, but a bigger"
+    cwarn "disk is recommended for comfort."
 fi
 
 cwarn "WARNING: ALL data on $DISK will be ERASED!"
@@ -293,7 +382,7 @@ cat > /etc/portage/make.conf <<MAKE
 COMMON_FLAGS="-O2 -pipe"
 MAKEOPTS="-j$(nproc)"
 FEATURES="\${FEATURES} getbinpkg binpkg-request-signature"
-EMERGE_DEFAULT_OPTS="--ask=n --quiet --getbinpkg --binpkg-respect-use=n --quiet-build=y"
+EMERGE_DEFAULT_OPTS="--ask=n --quiet --getbinpkg --quiet-build=y"
 ACCEPT_LICENSE="*"
 BINPKG_FORMAT="gpkg"
 MAKE
@@ -302,7 +391,7 @@ mkdir -p /etc/portage/binrepos.conf
 cat > /etc/portage/binrepos.conf/gentoobinhost.conf <<'BINHOST'
 [binhost]
 priority = 9999
-sync-uri = https://distfiles.gentoo.org/releases/amd64/binpackages/17.1/x86-64/
+sync-uri = https://distfiles.gentoo.org/releases/amd64/binpackages/23.0/x86-64/
 BINHOST
 
 mkdir -p /etc/portage/package.accept_keywords
@@ -318,15 +407,51 @@ cat > /etc/iwd/main.conf <<EOF
 EnableNetworkConfiguration=true
 EOF
 
+# free distfiles + build dirs between steps (matters on small disks)
+clean_pkg_leftovers() {
+    rm -rf /var/tmp/portage/*
+    rm -f /var/cache/distfiles/*
+    rm -rf /var/cache/binpkgs/*
+}
+
 # --- firmware first (GPU/Wi-Fi) so it is present in the initramfs ---
 echo "[*] Installing linux-firmware (GPU/Wi-Fi)..."
 emerge sys-kernel/linux-firmware
 
-# --- packages: precompiled kernel, grub, dhcpcd, iwd, sudo ---
-echo "[*] Installing packages (grub, gentoo-kernel-bin, dhcpcd, iwd, sudo)..."
-USE="dracut" emerge sys-boot/grub sys-kernel/gentoo-kernel-bin net-misc/dhcpcd net-wireless/iwd app-admin/sudo
+# --- trim firmware: datacenter NICs/HBAs + ARM SoCs are dead weight on
+# --- amd64 desktops/VMs (~800 MB). Desktop GPUs + Wi-Fi are kept.
+# --- Skip with FULL_FIRMWARE=1 (needs a bigger disk).
+if [ -z "${FULL_FIRMWARE:-}" ]; then
+    echo "[*] Trimming datacenter/SoC firmware blobs (FULL_FIRMWARE=1 to keep)..."
+    rm -rf /lib/firmware/qcom /lib/firmware/netronome /lib/firmware/mellanox \
+        /lib/firmware/qed /lib/firmware/qlogic /lib/firmware/cavium \
+        /lib/firmware/dpaa2 /lib/firmware/liquidio /lib/firmware/cxgb3 \
+        /lib/firmware/cxgb4 /lib/firmware/bnx2 /lib/firmware/bnx2x \
+        /lib/firmware/tehuti /lib/firmware/vxge /lib/firmware/sxg \
+        /lib/firmware/slicoss /lib/firmware/tigon /lib/firmware/amlogic \
+        /lib/firmware/meson /lib/firmware/rockchip /lib/firmware/arm \
+        /lib/firmware/imx /lib/firmware/nxp /lib/firmware/powervr
+fi
+clean_pkg_leftovers
+
+# --- kernel first, alone: its unpack needs ~2.5 GB free at once ---
+echo "[*] Installing kernel (gentoo-kernel-bin)..."
+USE="dracut" emerge sys-kernel/gentoo-kernel-bin
+clean_pkg_leftovers
+
+# --- bootloader + network ---
+echo "[*] Installing packages (grub, dhcpcd, iwd)..."
+USE="dracut" emerge sys-boot/grub net-misc/dhcpcd net-wireless/iwd
 if [ "$EFI" = "yes" ]; then
     emerge sys-boot/efibootmgr
+fi
+clean_pkg_leftovers
+
+# --- sudo (best-effort: needed only if an extra user was created) ---
+if [ -n "${USERNAME:-}" ]; then
+    echo "[*] Installing sudo..."
+    emerge app-admin/sudo || echo "[!] sudo failed to emerge; install it later with: emerge app-admin/sudo"
+    clean_pkg_leftovers
 fi
 
 # --- extra user (wheel group + sudo) ---
@@ -335,8 +460,12 @@ if [ -n "${USERNAME:-}" ]; then
     useradd -m -G wheel,audio,video -s /bin/bash "$USERNAME"
     USER_HASH=$(openssl passwd -6 "${USER_PASS:-gentoo}")
     sed -i "s|^$USERNAME:[^:]*|$USERNAME:$USER_HASH|" /etc/shadow
-    # enable %wheel via sudo
-    sed -i 's/^# *%wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
+    # enable %wheel via sudo (only if sudo actually installed)
+    if [ -f /etc/sudoers ]; then
+        sed -i 's/^# *%wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
+    else
+        echo "[!] sudo not installed; user $USERNAME has no sudo. Run later: emerge app-admin/sudo"
+    fi
 fi
 
 # --- initramfs (regenerate to embed linux-firmware) ---
