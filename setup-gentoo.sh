@@ -155,6 +155,11 @@ if [ -z "${_HOSTNAME_FROM_CLI:-}" ] && [ "${HOSTNAME:-}" = "$(cat /proc/sys/kern
 fi
 ask HOSTNAME "Machine hostname" "${HOSTNAME:-gentoo}"
 ask KEYMAP  "Keyboard layout (e.g.: us, us-intl, br-abnt2, de, es, fr)" "${KEYMAP:-us}"
+
+cwarn "Hint: To find available options, you can open another TTY (Ctrl+Alt+F2)."
+cwarn "- Timezones: grep 'Sua_Cidade' timezones.txt (ou cat timezones.txt)"
+cwarn "- Locales: eselect locale list"
+
 ask TZONE   "Timezone (e.g.: America/New_York)" "${TZONE:-America/New_York}"
 ask LOCALE  "Primary locale (e.g.: en_US.UTF-8)" "${LOCALE:-en_US.UTF-8}"
 ask USERNAME "Extra user (empty = root only)" "${USERNAME:-}"
