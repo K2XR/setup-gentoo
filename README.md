@@ -29,4 +29,4 @@ Needs a Linux live env with root, internet, and: `parted mkfs.ext4 mkfs.vfat tar
 
 **It wipes `$DISK` completely.** Double-check the disk, back up your stuff.
 
-I don't recommend using on a real machine, only use this script when you want to use gentoo for tests or on a VM
+I don't recommend using on a real machine for daily drive, only use this script when you want to use gentoo for tests or on a VM
