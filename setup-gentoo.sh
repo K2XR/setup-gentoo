@@ -157,7 +157,7 @@ ask HOSTNAME "Machine hostname" "${HOSTNAME:-gentoo}"
 ask KEYMAP  "Keyboard layout (e.g.: us, us-intl, br-abnt2, de, es, fr)" "${KEYMAP:-us}"
 
 cwarn "Hint: To find available options, you can open another TTY (Ctrl+Alt+F2)."
-cwarn "- Timezones: grep 'Sua_Cidade' timezones.txt (ou cat timezones.txt)"
+cwarn "- Timezones: grep 'Your_City' timezones.txt (or cat timezones.txt)"
 cwarn "- Locales: eselect locale list"
 
 ask TZONE   "Timezone (e.g.: America/New_York)" "${TZONE:-America/New_York}"
@@ -506,4 +506,4 @@ trap - EXIT
 cecho "Installation complete!"
 cecho "  - hostname: $HOSTNAME | keymap: $KEYMAP | timezone: $TZONE | locale: $LOCALE"
 if [ -n "${USERNAME:-}" ]; then cecho "  - user: $USERNAME (+ root)"; else cecho "  - user: root (password set during install)"; fi
-cecho "  - reboot with: reboot"
+cecho "  - reboot with: reot"
