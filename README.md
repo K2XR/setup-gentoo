@@ -23,7 +23,8 @@ Non-interactive (VMs/testing):
 sudo YES=1 DISK=/dev/vda HOSTNAME=pc USERNAME=user ./setup-gentoo.sh
 ```
 
-Needs a Linux live env with root, internet, and: `parted mkfs.ext4 mkfs.vfat tar curl lsblk blkid chroot`.
+Needs a Linux live env with root, internet, and: `parted mkfs.ext4 mkfs.vfat tar curl lsblk blkid chroot
+`.(you can use Gentoo LiveCD)
 
 ## Warning
 
