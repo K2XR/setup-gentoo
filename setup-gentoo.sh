@@ -8,7 +8,7 @@
 #   * target disk (with confirmation before wiping)
 #
 # Fixed (binary-first):
-#   * init: OpenRC, network via dhcpcd + iwd (Wi-Fi)
+#   * init: OpenRC, network via NetworkManager (nmtui)
 #   * precompiled kernel: sys-kernel/gentoo-kernel-bin (initramfs via dracut)
 #   * bootloader: GRUB (UEFI or BIOS auto-detected)
 #   * linux-firmware installed before the kernel (GPU/Wi-Fi in initramfs)
@@ -406,10 +406,12 @@ virtual/dist-kernel ~amd64
 sys-kernel/installkernel ~amd64
 EOF
 
-mkdir -p /etc/iwd
-cat > /etc/iwd/main.conf <<EOF
-[General]
-EnableNetworkConfiguration=true
+mkdir -p /etc/NetworkManager
+cat > /etc/NetworkManager/NetworkManager.conf <<EOF
+[main]
+plugins=keyfile
+rc-manager=file
+dhcp=internal
 EOF
 
 # free distfiles + build dirs between steps (matters on small disks)
@@ -422,6 +424,16 @@ clean_pkg_leftovers() {
 # --- firmware first (GPU/Wi-Fi) so it is present in the initramfs ---
 echo "[*] Installing linux-firmware (GPU/Wi-Fi)..."
 emerge sys-kernel/linux-firmware
+# --- verify linux-firmware is actually installed ---
+if ! equery l sys-kernel/linux-firmware >/dev/null 2>&1; then
+    echo "[X] sys-kernel/linux-firmware is NOT installed. Aborting." >&2
+    exit 1
+fi
+if [ -z "$(ls -A /lib/firmware 2>/dev/null)" ]; then
+    echo "[X] /lib/firmware is empty, firmware install failed. Aborting." >&2
+    exit 1
+fi
+echo "[*] linux-firmware verified: $(equery l sys-kernel/linux-firmware | tail -n1), $(ls /lib/firmware | wc -l) entries in /lib/firmware."
 
 # --- trim firmware: datacenter NICs/HBAs + ARM SoCs are dead weight on
 # --- amd64 desktops/VMs (~800 MB). Desktop GPUs + Wi-Fi are kept.
@@ -445,8 +457,8 @@ USE="dracut" emerge sys-kernel/gentoo-kernel-bin
 clean_pkg_leftovers
 
 # --- bootloader + network ---
-echo "[*] Installing packages (grub, dhcpcd, iwd)..."
-USE="dracut" emerge sys-boot/grub net-misc/dhcpcd net-wireless/iwd
+echo "[*] Installing packages (grub, NetworkManager)..."
+USE="dracut" emerge sys-boot/grub net-misc/networkmanager
 if [ "$EFI" = "yes" ]; then
     emerge sys-boot/efibootmgr
 fi
@@ -487,8 +499,7 @@ fi
 grub-mkconfig -o /boot/grub/grub.cfg
 
 # --- services ---
-rc-update add dhcpcd default
-rc-update add iwd default
+rc-update add NetworkManager default
 
 # --- cleanup ---
 rm -f /root/install-in-chroot.sh
@@ -506,4 +517,4 @@ trap - EXIT
 cecho "Installation complete!"
 cecho "  - hostname: $HOSTNAME | keymap: $KEYMAP | timezone: $TZONE | locale: $LOCALE"
 if [ -n "${USERNAME:-}" ]; then cecho "  - user: $USERNAME (+ root)"; else cecho "  - user: root (password set during install)"; fi
-cecho "  - reboot with: reot"
+cecho "  - reboot with: reboot"
