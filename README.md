@@ -8,7 +8,7 @@ A `setup-alpine`-style installer for Gentoo (OpenRC): asks a few questions, then
 
 - Asks hostname, keymap (`us`), timezone (`America/New_York`), locale (`en_US.UTF-8`), extra user + passwords — Enter accepts the `[default]`
 - Auto-detects UEFI/BIOS, partitions and formats the disk you pick (asks `yes` before wiping)
-- Installs latest stage3 (OpenRC, amd64), `gentoo-kernel-bin` + `dracut`, `linux-firmware` (GPU/Wi-Fi), GRUB, `dhcpcd` + `iwd`, `sudo`
+- Installs latest stage3 (OpenRC, amd64), `gentoo-kernel-bin` + `dracut`, `linux-firmware` (GPU/Wi-Fi), GRUB, `dhcpcd` + `NetworkManager`, `sudo`
 - Binary-first Portage (`getbinpkg` + official binhost), so it downloads binaries when available instead of compiling everything
 
 ## Usage
