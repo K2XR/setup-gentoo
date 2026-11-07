@@ -422,8 +422,8 @@ clean_pkg_leftovers() {
 }
 
 # --- firmware first (GPU/Wi-Fi) so it is present in the initramfs ---
-echo "[*] Installing linux-firmware (GPU/Wi-Fi)..."
-emerge sys-kernel/linux-firmware
+echo "[*] Installing linux-firmware (GPU/Wi-Fi) from source (not in binhost)..."
+emerge --getbinpkg=n sys-kernel/linux-firmware
 # --- verify linux-firmware is actually installed ---
 if ! equery l sys-kernel/linux-firmware >/dev/null 2>&1; then
     echo "[X] sys-kernel/linux-firmware is NOT installed. Aborting." >&2
