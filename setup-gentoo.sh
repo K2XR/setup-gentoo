@@ -425,7 +425,7 @@ clean_pkg_leftovers() {
 echo "[*] Installing linux-firmware (GPU/Wi-Fi) from source (not in binhost)..."
 emerge --getbinpkg=n sys-kernel/linux-firmware
 # --- verify linux-firmware is actually installed ---
-if ! equery l sys-kernel/linux-firmware >/dev/null 2>&1; then
+	if [ -z "$(ls -d /var/db/pkg/sys-kernel/linux-firmware-* 2>/dev/null)" ]; then
     echo "[X] sys-kernel/linux-firmware is NOT installed. Aborting." >&2
     exit 1
 fi
@@ -433,7 +433,7 @@ if [ -z "$(ls -A /lib/firmware 2>/dev/null)" ]; then
     echo "[X] /lib/firmware is empty, firmware install failed. Aborting." >&2
     exit 1
 fi
-echo "[*] linux-firmware verified: $(equery l sys-kernel/linux-firmware | tail -n1), $(ls /lib/firmware | wc -l) entries in /lib/firmware."
+	echo "[*] linux-firmware verified: $(ls -d /var/db/pkg/sys-kernel/linux-firmware-* 2>/dev/null | head -1 | xargs basename 2>/dev/null), $(ls /lib/firmware | wc -l) entries in /lib/firmware."
 
 # --- trim firmware: datacenter NICs/HBAs + ARM SoCs are dead weight on
 # --- amd64 desktops/VMs (~800 MB). Desktop GPUs + Wi-Fi are kept.
@@ -487,7 +487,7 @@ fi
 
 # --- initramfs (regenerate to embed linux-firmware) ---
 echo "[*] Regenerating initramfs with dracut (includes firmware)..."
-dracut --force --hostonly --add-drivers "amdgpu radeon i915 xe nouveau ath10k ath11k ath12k iwlwifi iwlmvm btusb xhci_pci nvme" || dracut --force
+dracut --force --hostonly || dracut --force
 
 # --- bootloader ---
 if [ "$EFI" = "yes" ]; then
